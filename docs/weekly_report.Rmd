@@ -1,0 +1,1070 @@
+---
+params:
+  current_week:
+  current_season:
+    
+title: "Week `r params$current_week` Report"
+subtitle: "Panera Sucks"
+date: "Updated: `r Sys.time()`"
+output:
+  rmdformats::html_clean:
+    highlight: kate
+    toc_depth: 2
+    toc_float: 
+      collapsed: false
+---
+
+[Back](../../index.html)
+
+```{r, echo = FALSE}
+id <- 1094681 # League ID
+league_name <- "Panera Sucks"
+first_season <- 2012
+curr_season <- params$current_season # Current season/year
+curr_week <- params$current_week # Current week
+```
+
+<!-- https://mbounthavong.com/blog/2022/7/30/hosting-a-r-markdown-html-file-on-a-github-page -->
+
+```{css, echo = FALSE}
+h1, h2, h3 {
+  font-weight: bold;
+}
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.align = "center")
+options(knitr.kable.NA = "")
+```
+
+```{r, warning = FALSE, message = FALSE}
+library(ffscrapr)
+library(nflfastR)
+library(nflreadr)
+library(tidyverse)
+library(kableExtra)
+library(ggthemes)
+library(formattable)
+library(RColorBrewer)
+library(plotly)
+library(shiny)
+```
+
+```{r}
+# League objects for seasons 2013 to curr_season
+all_leagues <- first_season:curr_season %>%
+  map(function(x) {
+    espn_connect(
+      season = x,
+      league_id = id,
+      swid = Sys.getenv("TAN_SWID"),
+      espn_s2 = Sys.getenv("TAN_ESPN_S2")
+    )
+  })  
+
+curr_league <- all_leagues[[length(all_leagues)]]
+
+# Pretty round
+pr <- function(x, digits = 2) {
+  format(round(x, digits), nsmall = digits)
+}
+
+# Team colors
+cols_8 <- brewer.pal(8, "Set2")
+cols_dark_8 <- brewer.pal(8, "Dark2")
+
+# Position factor levels
+pos_lvl <- c("QB", "RB", "WR", "TE", "DST", "K")
+
+# Position colors
+pos_col <- c("#FF8181", "#A9D08E", "#94BEE4", "#FFD966", "#C7A1E3", "#F4B084")
+
+position_col <- bind_cols(pos = pos_lvl, pos_col = pos_col)
+
+# Lineup slot factor levels
+slot_lvl <- c("QB", "RB", "WR", "TE", "FLEX", "DST", "K", "TOTAL")
+slot_col <- c("#FF8181", "#A9D08E", "#94BEE4", "#FFD966",
+                     "#B6B6B6", "#C7A1E3", "#F4B084", "#FFFF00")
+
+lineup_slot_col <- bind_cols(lineup_slot = factor(slot_lvl, levels = slot_lvl), slot_col = slot_col)
+
+# Team colors
+nfl_team_col <- tribble(
+  ~team, ~team_bg,
+  "ARI", "#97233F",
+  "ATL", "#A71930",
+  "BAL", "#241773",
+  "BUF", "#00338D",
+  "CAR", "#0085CA",
+  "CHI", "#F26522",
+  "CIN", "#FB4F14",
+  "CLE", "#22150C",
+  "DAL", "#0C264C",
+  "DEN", "#FB4F14",
+  "DET", "#046EB4",
+  "GBP", "#24423C",
+  "HOU", "#00143F",
+  "IND", "#003D79",
+  "JAC", "#D8A328",
+  "KCC", "#CA2430",
+  "LAC", "#2072BA",
+  "LAR", "#95774C",
+  "MIA", "#0091A0",
+  "MIN", "#4F2E84",
+  "NEP", "#0A2342",
+  "NOS", "#A08A58",
+  "NYG", "#192E6C",
+  "NYJ", "#203731",
+  "OAK", "#000000",
+  "PHI", "#014A53",
+  "PIT", "#FFC20E",
+  "SEA", "#7AC142",
+  "SFO", "#C9243F",
+  "TBB", "#D40909",
+  "TEN", "#4095D1",
+  "WAS", "#FFC20F"
+)
+
+# All seasons
+all_franchises <- all_leagues %>%
+  map_dfr(function(x) {
+    bind_cols(season = as.numeric(x$season), ff_franchises(x))
+  })
+  
+all_sched <- all_leagues %>%
+  map_dfr(function(x) {
+    bind_cols(season = as.numeric(x$season), ff_schedule(x))
+  })
+
+all_standings <- all_leagues %>%
+  map_dfr(function(x) {
+    bind_cols(season = as.numeric(x$season), ff_standings(x))
+  })
+
+
+# all_lineups <- all_leagues %>%
+#   map_dfr(function(x) {
+#     bind_cols(season = as.numeric(x$season), ff_starters(x))
+#   })
+
+#test <- ff_playerscores(curr_league)
+#test2 <- ff_scoringhistory(curr_league)
+
+# Current season league objects
+franchises <- all_franchises %>%
+  filter(season == curr_season) %>%
+  mutate(franchise_name = fct_reorder(franchise_name, franchise_id, min))
+
+franchise_color <- franchises %>%
+  select(franchise_id, franchise_name) %>%
+  bind_cols(fr_col = cols_8, fr_col_dark = cols_dark_8)
+
+lineups <- ff_starters(curr_league, week = curr_week) %>%
+  mutate(franchise_name = fct_reorder(franchise_name, franchise_id, min),
+         pos = factor(pos, levels = pos_lvl)) %>%
+  left_join(franchise_color, by = c("franchise_id", "franchise_name")) %>%
+  mutate(clean_name = dp_clean_names(player_name, lowercase = TRUE))
+
+schedule <- ff_schedule(curr_league) %>%
+  left_join(franchise_color) %>%
+  left_join(franchise_color, by = c("opponent_id" = "franchise_id"))
+
+```
+
+# Week `r curr_week` Matchups {.tabset .tabset-pills}
+
+## Matchup Summary
+```{r}
+matchups <- schedule %>%
+  filter(week == curr_week, result == "W")
+
+matchups %>%
+  select(franchise_name.x, franchise_score,
+         franchise_name.y, opponent_score) %>%
+  kbl(
+    col.names = c("", "", "", ""),
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(1, background = matchups$fr_col.x) %>%
+  column_spec(2, background = "lightgreen") %>%
+  column_spec(3, background = matchups$fr_col.y) %>%
+  column_spec(4, background = "pink") %>%
+  pack_rows(index = c("Matchup 1" = 1, "Matchup 2" = 1, "Matchup 3" = 1, "Matchup 4" = 1))
+```
+
+```{r}
+lineups_played <- lineups %>%
+  filter(!(lineup_slot %in% c("BE", "IR"))) %>%
+  arrange(desc(player_score)) %>%
+  mutate(lineup_slot = if_else(lineup_slot == "RB/WR/TE", "FLEX", lineup_slot),
+         lineup_slot = factor(lineup_slot, levels = slot_lvl)) %>%
+  group_split(franchise_id) %>%
+  map_dfr(full_join, filter(lineup_slot_col, lineup_slot != "TOTAL")) %>%
+  fill(-c(player_score, projected_score, player_id, player_name, pos, team, eligible_lineup_slots, clean_name)) %>%
+  arrange(franchise_id, lineup_slot, desc(player_score)) %>%
+  group_by(franchise_id, lineup_slot) %>%
+  mutate(lineup_slot_n = row_number(),
+         player_score = if_else(is.na(player_score), 0, player_score)) %>%
+  ungroup()
+
+matchup_simple <- matchups %>% select(franchise_id, opponent_id)
+
+head2head <- matchup_simple %>%
+  inner_join(lineups_played, by = c("franchise_id")) %>%
+  inner_join(lineups_played,
+    by = c("lineup_slot", "lineup_slot_n", "opponent_id" = "franchise_id")) %>%
+  rowwise() %>%
+  mutate(
+    player_name.x = if_else(!is.na(player_name.x),
+                            paste0(player_name.x, "<br>", team.x, " ", pos.x),
+                            ""),
+    player_name.y = if_else(!is.na(player_name.y),
+                            paste0(player_name.y, "<br>", team.y, " ", pos.y),
+                            "")
+  )
+```
+
+## Matchup 1 Details
+```{r}
+matchup_1_tot <- matchups %>% slice(1) %>%
+  mutate(player_score.x = franchise_score,
+         lineup_slot = "TOTAL",
+         player_score.y = opponent_score) %>%
+  select(franchise_name.x, player_score.x, lineup_slot, franchise_name.y, player_score.y)
+
+matchup_1 <- head2head %>%
+  inner_join(slice(matchup_simple, 1)) %>%
+  bind_rows(matchup_1_tot) %>%
+  left_join(lineup_slot_col, by = "lineup_slot")
+
+team_x <- as.character(unique(matchup_1$franchise_name.x))
+team_y <- as.character(unique(matchup_1$franchise_name.y))
+
+matchup_1 %>%
+  select(player_name.x, player_score.x, lineup_slot,
+         player_score.y, player_name.y) %>%
+  kbl(
+    col.names = c("", "", "", "", ""),
+    align = "lrclr",
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  row_spec(14, bold = T) %>%
+  pack_rows(paste0(team_x, " vs. ", team_y), 1, 14, label_row_css = "text-align: center;") %>%
+  column_spec(2:4, extra_css = "vertical-align:middle;") %>%
+  column_spec(3, background = matchup_1$slot_col)
+```
+
+## Matchup 2 Details
+```{r}
+matchup_2_tot <- matchups %>% slice(2) %>%
+  mutate(player_score.x = franchise_score,
+         lineup_slot = "TOTAL",
+         player_score.y = opponent_score) %>%
+  select(franchise_name.x, player_score.x, lineup_slot, franchise_name.y, player_score.y)
+
+matchup_2 <- head2head %>%
+  inner_join(slice(matchup_simple, 2)) %>%
+  bind_rows(matchup_2_tot) %>%
+  left_join(lineup_slot_col, by = "lineup_slot")
+
+team_x <- as.character(unique(matchup_2$franchise_name.x))
+team_y <- as.character(unique(matchup_2$franchise_name.y))
+
+matchup_2 %>%
+  select(player_name.x, player_score.x, lineup_slot,
+         player_score.y, player_name.y) %>%
+  kbl(
+    col.names = c("", "", "", "", ""),
+    align = "lrclr",
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  row_spec(14, bold = T) %>%
+  pack_rows(paste0(team_x, " vs. ", team_y), 1, 14, label_row_css = "text-align: center;") %>%
+  column_spec(2:4, extra_css = "vertical-align:middle;") %>%
+  column_spec(3, background = matchup_2$slot_col)
+```
+
+## Matchup 3 Details
+```{r}
+matchup_3_tot <- matchups %>% slice(3) %>%
+  mutate(player_score.x = franchise_score,
+         lineup_slot = "TOTAL",
+         player_score.y = opponent_score) %>%
+  select(franchise_name.x, player_score.x, lineup_slot, franchise_name.y, player_score.y)
+
+matchup_3 <- head2head %>%
+  inner_join(slice(matchup_simple, 3)) %>%
+  bind_rows(matchup_3_tot) %>%
+  left_join(lineup_slot_col, by = "lineup_slot")
+
+team_x <- as.character(unique(matchup_3$franchise_name.x))
+team_y <- as.character(unique(matchup_3$franchise_name.y))
+
+matchup_3 %>%
+  select(player_name.x, player_score.x, lineup_slot,
+         player_score.y, player_name.y) %>%
+  kbl(
+    col.names = c("", "", "", "", ""),
+    align = "lrclr",
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  row_spec(14, bold = T) %>%
+  pack_rows(paste0(team_x, " vs. ", team_y), 1, 14, label_row_css = "text-align: center;") %>%
+  column_spec(2:4, extra_css = "vertical-align:middle;") %>%
+  column_spec(3, background = matchup_3$slot_col)
+```
+
+## Matchup 4 Details
+```{r}
+matchup_4_tot <- matchups %>% slice(4) %>%
+  mutate(player_score.x = franchise_score,
+         lineup_slot = "TOTAL",
+         player_score.y = opponent_score) %>%
+  select(franchise_name.x, player_score.x, lineup_slot, franchise_name.y, player_score.y)
+
+matchup_4 <- head2head %>%
+  inner_join(slice(matchup_simple, 4)) %>%
+  bind_rows(matchup_4_tot) %>%
+  left_join(lineup_slot_col, by = "lineup_slot")
+
+team_x <- as.character(unique(matchup_4$franchise_name.x))
+team_y <- as.character(unique(matchup_4$franchise_name.y))
+
+matchup_4 %>%
+  select(player_name.x, player_score.x, lineup_slot,
+         player_score.y, player_name.y) %>%
+  kbl(
+    col.names = c("", "", "", "", ""),
+    align = "lrclr",
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  row_spec(14, bold = T) %>%
+  pack_rows(paste0(team_x, " vs. ", team_y), 1, 14, label_row_css = "text-align: center;") %>%
+  column_spec(2:4, extra_css = "vertical-align:middle;") %>%
+  column_spec(3, background = matchup_4$slot_col)
+```
+
+# Week `r curr_week` Standings
+
+## Regular Standings
+
+```{r}
+weekly_records <- schedule %>%
+  filter(week <= curr_week) %>%
+  select(week, franchise_id, "franchise_name" = "franchise_name.x", "fr_col" = "fr_col.x", franchise_score, opponent_score, result) %>%
+  mutate(
+    W = if_else(result == "W", 1, 0),
+    L = if_else(result == "L", 1, 0),
+    T = if_else(result == "T", 1, 0)
+  ) %>%
+  select(-result) %>%
+  group_by(franchise_id, franchise_name, fr_col) %>%
+  mutate(
+    h2h_wins = cumsum(W),
+    h2h_losses = cumsum(L),
+    h2h_ties = cumsum(T),
+    record = paste(h2h_wins, h2h_losses, h2h_ties, sep = "-"),
+    points_for = cumsum(franchise_score),
+    points_against = cumsum(opponent_score),
+  ) %>%
+  select(-c(W, L, T, franchise_score, opponent_score)) %>%
+  arrange(week, desc(h2h_wins), desc(points_for)) %>%
+  group_by(week) %>%
+  mutate(weekly_rank = row_number()) %>%
+  ungroup()
+
+standings <- weekly_records %>%
+  filter(week == curr_week) %>%
+  arrange(desc(h2h_wins), desc(points_for)) %>%
+  mutate(points_for = color_bar("lightgreen")(comma(points_for)),
+         points_against = color_bar("pink")(comma(points_against)),
+         h2h_winpct = h2h_wins / (h2h_wins + h2h_losses + h2h_ties))
+
+standings %>%
+  mutate(h2h_winpct = round(h2h_winpct * 100, 1)) %>%
+  select(weekly_rank, franchise_name, h2h_wins, h2h_losses, h2h_ties, h2h_winpct, points_for, points_against) %>%
+  kbl(col.names = c("Rank", "Franchise", "Wins", "Losses", "Ties", "Win %", "Points For", "Points Against"),
+      escape = F) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = standings$fr_col)
+```
+
+```{r}
+fig <- plot_ly(weekly_records,
+  x = ~week,
+  y = ~weekly_rank,
+  split = ~franchise_name,
+  type = "scatter",
+  mode = "line",
+  color = ~franchise_name,
+  colors = cols_dark_8
+  ) %>%
+  layout(
+    title = "Weekly Standings",
+    xaxis = list(
+      title = "",
+      ticktext = as.list(paste("Week", seq(1, curr_week))),
+      tickvals = as.list(seq(1, curr_week)),
+      tickmode = "array"
+      ),
+    yaxis = list(
+      title = "",
+      autorange = "reversed",
+      ticktext = as.list(scales::ordinal(seq(1, 8))),
+      tickvals = as.list(seq(1, 8)),
+      tickmode = "array"
+    ),
+    showlegend = FALSE,
+    hovermode = "x"
+    )
+
+div(fig, align = "center")
+```
+
+## All-Play Standings
+
+`All-Play` is your record if you played all other teams every single week.
+
+```{r, eval = FALSE}
+allplay_standings <- standings %>%
+  arrange(desc(allplay_wins), desc(points_for)) %>%
+  mutate(rank = row_number())
+
+allplay_standings %>%
+  mutate(allplay_winpct = round(allplay_winpct * 100, 1)) %>%
+  select(rank, franchise_name, allplay_wins, allplay_losses, allplay_winpct) %>%
+  kbl(col.names = c("Rank", "Franchise", "All-Play Wins", "All-Play Losses", "All-Play Win %"),
+      escape = F) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = allplay_standings$fr_col)
+```
+
+# Weekly Awards
+
+## Highest and Lowest Scoring Franchise
+```{r}
+ecdf_pctile <- function(x, val) ecdf(x)(val)
+
+all_sched_played <- all_sched %>%
+  filter(!is.na(result))
+
+all_team_scores <- all_sched_played %>%
+  mutate(
+    score_pctile = round(ecdf_pctile(all_sched$franchise_score, franchise_score) * 100, 1),
+    pctile_col = case_when(
+      score_pctile == 100 ~ "#E5CC80",
+      score_pctile >= 99 ~ "#E268A8",
+      score_pctile >= 95 ~ "#FF8000",
+      score_pctile >= 75 ~ "#A335EE",
+      score_pctile >= 50 ~ "#0070FF",
+      score_pctile >= 25 ~ "#00C600",
+      TRUE ~ "#666666"
+      ))
+
+team_scores <- all_team_scores %>%
+  filter(season == curr_season, week == curr_week) %>%
+  left_join(select(franchises, franchise_id, franchise_name)) %>%
+  arrange(desc(franchise_score))
+
+# number times highest/low scorer
+season_high_scores <- all_team_scores %>%
+  filter(season == curr_season) %>%
+  left_join(select(franchises, franchise_id, franchise_name)) %>%
+  group_by(week) %>%
+  slice_max(franchise_score) %>%
+  group_by(franchise_id, franchise_name) %>%
+  summarize(num_high = n())
+
+season_low_scores <- all_team_scores %>%
+  filter(season == curr_season) %>%
+  left_join(select(franchises, franchise_id, franchise_name)) %>%
+  group_by(week) %>%
+  slice_min(franchise_score) %>%
+  group_by(franchise_id, franchise_name) %>%
+  summarize(num_low = n())
+
+team_high <- team_scores %>%
+  slice_head(n = 1) %>%
+  inner_join(season_high_scores)
+
+team_low <- team_scores %>%
+  slice_tail(n = 1) %>%
+  inner_join(season_low_scores)
+
+
+team_scores_table <- team_scores %>%
+  full_join(franchise_color, by = c("franchise_id", "franchise_name")) %>%
+  mutate(
+    rank = rank(-franchise_score, ties.method = "min"),
+    franchise_score_tab = color_bar("lightgreen")(franchise_score)
+    ) 
+
+team_scores_table %>%
+  select(rank, franchise_name, franchise_score_tab, score_pctile) %>%
+  kbl(
+    col.names = c("Rank", "Franchise", "Score", "Percentile"),
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = team_scores_table$fr_col) %>%
+  column_spec(4, background = team_scores_table$pctile_col, color = "white")
+```
+
+### - Highest Scoring Franchise
+The highest scoring franchise was **`r team_high$franchise_name`** with **`r pr(team_high$franchise_score)`** points. This score was in **`r scales::ordinal(floor(team_high$score_pctile))`** percentile for all `r nrow(all_sched_played)` lineups dating back to **`r first_season`**. This is their **`r scales::ordinal(team_high$num_high)`** time with the highest weekly score this season.
+
+### - Lowest Scoring Franchise
+The lowest scoring franchise was **`r team_low$franchise_name`** with **`r pr(team_low$franchise_score)`** points. This score was in **`r scales::ordinal(floor(team_low$score_pctile))`** percentile for all `r nrow(all_sched_played)` lineups dating back to **`r first_season`**. This is their **`r scales::ordinal(team_low$num_low)`** time with the lowest weekly score this season.
+
+## Starts of the Week
+```{r}
+best_starters <- lineups %>%
+  filter(!(lineup_slot %in% c("BE", "IR")), player_score > 0) %>%
+  group_by(pos) %>%
+  slice_max(player_score) %>%
+  left_join(nfl_team_col, by = "team") %>%
+  left_join(position_col, by = c("pos"))
+
+best_starters %>%
+  select(pos, player_name, team, player_score, franchise_name) %>%
+  kbl(col.names = c("Position", "Name", "Team",  "Score", "Franchise")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(5, background = best_starters$fr_col) %>%
+  column_spec(1, background = best_starters$pos_col) #%>%
+  # column_spec(3, background = best_starters$team_bg, color = "#FFFFFF")
+```
+
+## Benchwarmers of the Week
+```{r}
+best_bench <- lineups %>%
+  filter(lineup_slot %in% c("BE", "IR"), player_score > 0) %>%
+  group_by(pos) %>%
+  slice_max(player_score) %>%
+  left_join(nfl_team_col, by = "team") %>%
+  left_join(position_col, by = c("pos"))
+
+best_bench %>%
+  select(pos, player_name, team, player_score, franchise_name) %>%
+  kbl(col.names = c("Position", "Name", "Team",  "Score", "Franchise")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(5, background = best_bench$fr_col) %>%
+  column_spec(1, background = best_bench$pos_col) #%>%
+  # column_spec(3, background = best_bench$team_bg, color = "#FFFFFF")
+```
+
+## Best and Worst Managers
+
+How close were teams to their optimal lineup?
+
+```{r}
+# Best QB
+max_qb <- lineups %>%
+  select(-c(franchise_score, lineup_slot, projected_score, eligible_lineup_slots)) %>%
+  filter(pos == "QB") %>%
+  group_by(franchise_name) %>%
+  arrange(desc(player_score)) %>%
+  slice_head(n = 2) %>%
+  mutate(slot = "QB")
+
+# Best RB
+max_rb <- lineups %>%
+  select(-c(franchise_score, lineup_slot, projected_score, eligible_lineup_slots)) %>%
+  filter(pos == "RB") %>%
+  group_by(franchise_name) %>%
+  arrange(desc(player_score)) %>%
+  slice_head(n = 3) %>%
+  mutate(slot = "RB")
+
+# Best WR
+max_wr <- lineups %>%
+  select(-c(franchise_score, lineup_slot, projected_score, eligible_lineup_slots)) %>%
+  filter(pos == "WR") %>%
+  group_by(franchise_name) %>%
+  arrange(desc(player_score)) %>%
+  slice_head(n = 3) %>%
+  mutate(slot = "WR")
+
+# Best TE
+max_te <- lineups %>%
+  select(-c(franchise_score, lineup_slot, projected_score, eligible_lineup_slots)) %>%
+  filter(pos == "TE") %>%
+  group_by(franchise_name) %>%
+  arrange(desc(player_score)) %>%
+  slice_head(n = 1) %>%
+  mutate(slot = "TE")
+
+# Best DST
+max_dst <- lineups %>%
+  select(-c(franchise_score, lineup_slot, projected_score, eligible_lineup_slots)) %>%
+  filter(pos == "DST") %>%
+  group_by(franchise_name) %>%
+  arrange(desc(player_score)) %>%
+  slice_head(n = 1) %>%
+  mutate(slot = "DST")
+
+# Best K
+max_k <- lineups %>%
+  select(-c(franchise_score, lineup_slot, projected_score, eligible_lineup_slots)) %>%
+  filter(pos == "K") %>%
+  group_by(franchise_name) %>%
+  arrange(desc(player_score)) %>%
+  slice_head(n = 1) %>%
+  mutate(slot = "K")
+
+max_pos <- 
+  bind_rows(max_qb, max_rb, max_wr, max_te, max_dst, max_k)
+
+leftover <- lineups %>%
+  select(-c(franchise_score, lineup_slot, projected_score, eligible_lineup_slots)) %>%
+  mutate(flex = pos %in% c("RB", "WR", "TE")) %>%
+  filter(flex == TRUE) %>%
+  anti_join(max_pos) %>%
+  group_by(franchise_name) %>%
+  arrange(desc(player_score)) %>%
+  slice_head(n = 2) %>%
+  mutate(slot = "RB/WR/TE")
+
+max_all <- bind_rows(max_pos, leftover) %>%
+  mutate(
+    slot = factor(
+      slot,
+      levels = c("QB", "RB", "WR", "TE", "RB/WR/TE", "DST", "K"))) %>%
+  arrange(franchise_name, slot)
+
+max_score <- max_all %>%
+  group_by(week, franchise_id, franchise_name) %>%
+  summarize(max_score = sum(player_score))
+
+manager_efficiency <- team_scores_table %>%
+  inner_join(max_score) %>%
+  mutate(score_delta = franchise_score - max_score,
+         score_pct = round(franchise_score * 100 / max_score, 1)) %>%
+  arrange(desc(score_delta)) %>%
+  mutate(rank = row_number())
+
+manager_best <- manager_efficiency %>% slice_head(n = 1)
+manager_worst <- manager_efficiency %>% slice_tail(n = 1)
+```
+
+```{r}
+manager_efficiency %>%
+  arrange(desc(score_delta)) %>%
+  select(rank, franchise_name, franchise_score, max_score, score_delta, score_pct) %>%
+  kbl(
+    col.names = c("Rank", "Franchise", "Score", "Max Score", "Difference", "% of Max"),
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = manager_efficiency$fr_col) %>%
+  column_spec(5, color = "white", background = spec_color(manager_efficiency$score_delta, end = 0.9))
+```
+
+### - Best Manager
+
+**`r manager_best$franchise_name`** set a line-up that scored **`r manager_best$franchise_score`**, a mere **`r abs(manager_best$score_delta)`** points below their best possible line-up of **`r manager_best$max_score`**.
+
+### - Worst Manager
+
+**`r manager_worst$franchise_name`** set a line-up that scored **`r manager_worst$franchise_score`**, a staggering **`r abs(manager_worst$score_delta)`** points below their best possible line-up of **`r manager_worst$max_score`**.
+
+## Matchup Scores
+
+```{r}
+score_diff <- matchups %>%
+  mutate(score_diff = franchise_score - opponent_score) %>%
+  arrange(desc(score_diff)) %>%
+  mutate(rank = row_number())
+
+score_diff_best <- score_diff %>% slice_head(n = 1)
+score_diff_worst <- score_diff %>% slice_tail(n = 1)
+
+score_diff %>%
+  select(rank, franchise_name.x, franchise_name.y, score_diff) %>%
+  kbl(
+    col.names = c("Rank", "Winner", "Loser", "Margin of Victory"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = score_diff$fr_col.x) %>%
+  column_spec(3, background = score_diff$fr_col.y) %>%
+  column_spec(4, color = "white", background = spec_color(score_diff$score_diff, end = 0.9))
+```
+
+### - Biggest Blowout
+
+**`r score_diff_best$franchise_name.x`** demolished **`r score_diff_best$franchise_name.y`**, outscoring them by a whopping **`r score_diff_best$score_diff`** points.
+
+### - Narrowest Victory
+
+**`r score_diff_worst$franchise_name.x`** had a close call against **`r score_diff_worst$franchise_name.y`**, winning by only **`r score_diff_worst$score_diff`** points.
+
+### - Better Luck Next Time!
+
+```{r}
+worst_luck <- matchups %>%
+  arrange(desc(opponent_score)) %>%
+  slice_head(n = 1)
+
+worst_luck_wins <- schedule %>% 
+  filter(week == curr_week,
+         franchise_name.x != worst_luck$franchise_name.y,
+         franchise_score < worst_luck$opponent_score) %>%
+  nrow()
+```
+
+**`r worst_luck$franchise_name.y`** scored **`r worst_luck$opponent_score`** points in their loss against **`r worst_luck$franchise_name.x`**. That would have been enough to win against **`r worst_luck_wins`** other teams this week.
+
+### - Not Even Close
+
+```{r}
+best_luck <- matchups %>%
+  arrange(franchise_score) %>%
+  slice_head(n = 1)
+
+best_luck_wins <- schedule %>% 
+  filter(week == curr_week,
+         franchise_name.x != best_luck$franchise_name.x,
+         franchise_score > best_luck$franchise_score) %>%
+  nrow()
+```
+
+**`r best_luck$franchise_name.x`** only scored **`r best_luck$franchise_score`** points in their win against **`r best_luck$franchise_name.y`**. That would have been a loss against **`r best_luck_wins`** other teams this week.
+
+## Heavy Hitting Positions
+
+Highest average points scored for positions that have more than one lineup slot.
+
+```{r}
+lineups_pos <- lineups %>%
+  filter(!(lineup_slot %in% c("BE", "IR")), pos %in% c("QB", "RB", "WR", "TE")) %>%
+  group_by(week, franchise_id, franchise_name, fr_col, pos) %>%
+  arrange(desc(player_score)) %>%
+  summarize(n = n(), mean_pt = mean(player_score),
+            all_players = paste(player_name, paste0("(", player_score, ")"), collapse = ", "),.groups = "keep") %>%
+  group_by(pos) %>%
+  arrange(pos, desc(mean_pt)) %>%
+  mutate(rank = row_number()) %>%
+  left_join(position_col) %>%
+  ungroup()
+
+lineups_qb <- lineups_pos %>%
+  filter(pos == "QB")
+
+lineups_rb <- lineups_pos %>%
+  filter(pos == "RB")
+
+lineups_wr <- lineups_pos %>%
+  filter(pos == "WR")
+
+lineups_te <- lineups_pos %>%
+  filter(pos == "TE")
+```
+
+```{r}
+lineups_qb %>%
+  select(rank, franchise_name, n, mean_pt, all_players) %>%
+  kbl(digits = 2,
+    col.names = c("Rank", "Franchise", "Number Played", "Avg. Points", "Player Names"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = lineups_qb$fr_col) %>%
+  add_header_above(c("QB" = 5), background = "#FF8181", bold = T, align = "l")
+```
+
+```{r}
+lineups_rb %>%
+  select(rank, franchise_name, n, mean_pt, all_players) %>%
+  kbl(digits = 2,
+    col.names = c("Rank", "Franchise", "Number Played", "Avg. Points", "Player Names"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = lineups_rb$fr_col) %>%
+  add_header_above(c("RB" = 5), background = "#A9D08E", bold = T, align = "l")
+```
+
+```{r}
+lineups_wr %>%
+  select(rank, franchise_name, n, mean_pt, all_players) %>%
+  kbl(digits = 2,
+    col.names = c("Rank", "Franchise", "Number Played", "Avg. Points", "Player Names"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = lineups_wr$fr_col) %>%
+  add_header_above(c("WR" = 5), background = "#94BEE4", bold = T, align = "l")
+```
+
+```{r}
+lineups_te %>%
+  select(rank, franchise_name, n, mean_pt, all_players) %>%
+  kbl(digits = 2,
+    col.names = c("Rank", "Franchise", "Number Played", "Avg. Points", "Player Names"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = lineups_te$fr_col) %>%
+  add_header_above(c("TE" = 5), background = "#FFD966", bold = T, align = "l")
+```
+
+## Highest Player Attributes
+
+```{r}
+scoring_rules <- ff_scoring(curr_league) %>%
+  arrange(stat_id) %>%
+  mutate(
+    stat_name = case_when(
+      stat_id ==   1 ~ "passingCompletions",
+      stat_id ==  17 ~ "passing300YardGame",
+      stat_id ==  18 ~ "passing400YardGame",
+      stat_id ==  23 ~ "rushingCarries",
+      stat_id ==  68 ~ "totalFumbles",
+      stat_id == 106 ~ "defensiveFumblesForced",
+      TRUE          ~ stat_name
+    )
+  ) 
+
+addtl_stat <- tribble(
+  ~nflfastr_event, ~platform, ~ff_event,
+  "sack_fumbles", "espn", "totalFumbles",
+  "receiving_fumbles", "espn", "totalFumbles",
+  "rushing_fumbles", "espn", "totalFumbles",
+)
+
+espn_nflfastr_stat_mapping <- nflfastr_stat_mapping %>%
+  filter(platform == "espn") %>%
+  bind_rows(addtl_stat)
+  
+# Missing yardage bonuses for rushing/receiving/passing,
+#   kickoff/punt return yardage
+#   defensive stuff
+league_rules <- scoring_rules %>%
+  left_join(
+    espn_nflfastr_stat_mapping,
+    by = c(stat_name = "ff_event")
+  ) %>%
+  mutate(
+    nflfastr_event = case_when(
+      stat_name == "passingCompletions"     ~ "completions",
+      stat_name == "rushingCarries"         ~ "carries",
+      stat_name == "puntReturnTouchdown"    ~ "punt_return_touchdowns",
+      stat_name == "puntReturnYards"        ~ "punt_return_yards",
+      stat_name == "kickoffReturnTouchdown" ~ "kickoff_return_touchdowns",
+      stat_name == "kickoffReturnYards"     ~ "kickoff_return_yards",
+      stat_name == "passing300YardGame"     ~ "passing300YardGame",
+      stat_name == "passing400YardGame"     ~ "passing400YardGame",
+      stat_name == "rushing100YardGame"     ~ "rushing100YardGame",
+      stat_name == "rushing200YardGame"     ~ "rushing200YardGame",
+      stat_name == "receiving100YardGame"   ~ "receiving200YardGame",
+      stat_name == "receiving200YardGame"   ~ "receiving200YardGame",
+      TRUE ~ nflfastr_event
+    ),
+    platform = "espn"
+  )
+
+ros <- nflfastr_rosters(curr_season) %>%
+  mutate(position = if_else(position == "SPEC", depth_chart_position, position)) %>%
+  select(any_of(c(
+    "season", "gsis_id", "sportradar_id",
+    "player_name" = "full_name", "pos" = "position", "team"
+  ))) %>%
+  left_join(
+    dp_playerids() %>%
+      select("sportradar_id", "espn_id"),
+    by = c("sportradar_id"),
+    na_matches = "never"
+  )
+
+# offensive stats
+offense <- nflfastr_weekly(seasons = curr_season, type = "offense") %>%
+  select(any_of(c(
+    "season", "week","player_id",
+    "attempts", "carries", "completions", "interceptions", "passing_2pt_conversions", "passing_first_downs",
+    "passing_tds", "passing_yards", "receiving_2pt_conversions", "receiving_first_downs",
+    "receiving_fumbles", "receiving_fumbles_lost", "receiving_tds",
+    "receiving_yards", "receptions", "rushing_2pt_conversions", "rushing_first_downs",
+    "rushing_fumbles", "rushing_fumbles_lost", "rushing_tds", "rushing_yards",
+    "sack_fumbles", "sack_fumbles_lost", "sack_yards", "sacks", "special_teams_tds",
+    "targets")
+  )) %>%
+  pivot_longer(
+    names_to = "metric",
+    cols = -c("season","week","player_id")
+  )
+
+yd_bonus <- offense %>%
+  filter(metric %in% c("passing_yards","rushing_yards","receiving_yards")) %>%
+  rowwise() %>%
+  mutate(
+    threshold_1 = if_else(metric == "passing_yards", 400, 200),
+    threshold_2 = if_else(metric == "passing_yards", 300, 100),
+    t1 = value >= threshold_1,
+    t2 = value >= threshold_2,
+    metric = paste0(
+      str_split(metric, "_")[[1]][1],
+        if_else(t1, threshold_1, threshold_2),
+        "YardGame"
+      ),
+    value = as.numeric(t1 | t2),
+    threshold_1 = NULL,
+    threshold_2 = NULL,
+    t1 = NULL,
+    t2 = NULL
+  )
+
+# kicking stats
+kicking <- nflfastr_weekly(seasons = curr_season, type = "kicking") %>%
+  select(any_of(c(
+    "season","week","player_id",
+    "fg_att", "fg_blocked",
+    "fg_made", "fg_made_0_19", "fg_made_20_29", "fg_made_30_39",
+    "fg_made_40_49", "fg_made_50_59", "fg_made_60_", "fg_made_distance",
+    "fg_missed", "fg_missed_0_19", "fg_missed_20_29", "fg_missed_30_39",
+    "fg_missed_40_49", "fg_missed_50_59", "fg_missed_60_", "fg_missed_distance",
+    "fg_pct","pat_att", "pat_blocked", "pat_made",
+    "pat_missed", "pat_pct"
+  ))) %>%
+  pivot_longer(
+    names_to = "metric",
+    cols = -c("season", "week", "player_id")
+  )
+
+# kick/punt return stats
+returns <- load_pbp(seasons = curr_season) %>%
+  filter(play_type %in% c("kickoff", "punt")) %>%
+  mutate(
+    player_id = coalesce(punt_returner_player_id, kickoff_returner_player_id)
+  ) %>%
+  select(season, week, player_id, play_type, return_yards, return_touchdown) %>%
+  filter(!is.na(player_id)) %>%
+  group_by(season, week, player_id, play_type) %>%
+  summarize(return_yards = sum(return_yards),
+            return_touchdowns = sum(return_touchdown), .groups = "keep") %>%
+  pivot_wider(id_cols = c(season, week, player_id),
+              names_from = play_type,
+              names_glue = "{play_type}_{.value}",
+              values_from = c(return_yards, return_touchdowns),
+              values_fill = 0) %>%
+  pivot_longer(
+    cols = -c("season", "week", "player_id"),
+    names_to = "metric"
+  )
+
+
+
+# Combine all stats
+all_stats <- bind_rows(offense, yd_bonus, kicking, returns)
+
+player_points <- ros %>%
+  inner_join(all_stats, by = c(gsis_id = "player_id", "season")) %>%
+  inner_join(league_rules, by = c(metric = "nflfastr_event", "pos")) %>%
+  mutate(pp_stat = value * points) %>%
+  group_by(season, week, gsis_id, sportradar_id) %>%
+  mutate(tot_points = round(sum(pp_stat, na.rm = TRUE), 2)) %>%
+  ungroup() %>%
+  pivot_wider(
+    id_cols = c(
+      "season",
+      "week",
+      "gsis_id",
+      "sportradar_id",
+      "espn_id",
+      "player_name",
+      "pos",
+      "team",
+      "tot_points"
+    ),
+    names_from = metric,
+    values_from = value,
+    values_fill = 0,
+    values_fn = max) %>%
+  mutate(clean_name = dp_clean_names(player_name, lowercase = TRUE))
+
+# lineup_pts <- lineups %>%
+#   full_join()
+
+  # mutate(
+  #   team = case_when(
+  #     team == "GB"  ~ "GBP",
+  #     team == "JAX" ~ "JAC",
+  #     team == "KC"  ~ "KCC",
+  #     team == "LA"  ~ "LAR",
+  #     team == "LV"  ~ "OAK",
+  #     team == "NE"  ~ "NEP",
+  #     team == "NO"  ~ "NOS",
+  #     team == "SF"  ~ "SFO",
+  #     team == "TB"  ~ "TBB",
+  #     TRUE          ~ team
+  #     ),
+  #   player_name = case_when(
+  #     player_name == "A.J. Dillon" ~ "AJ Dillon",
+  #     player_name == "Allen Robinson" ~ "Allen Robinson II",
+  #     player_name == "Brian Robinson" ~ "Brian Robinson Jr.",
+  #     player_name == "Darrell Henderson" ~ "Darrell Henderson Jr.",
+  #     player_name == "D.J. Moore" ~ "DJ Moore",
+  #     player_name == "Josh Palmer" ~ "Joshua Palmer",
+  #     player_name == "Melvin Gordon" ~ "Melvin Gordon III",
+  #     player_name == "Michael Pittman" ~ "Michael Pittman Jr.",
+  #     player_name == "Terrace Marshall" ~ "Terrace Marshall Jr.",
+  #     TRUE ~ player_name
+  #   )
+  # )
+```
+
+```{r}
+# Merging with ESPN
+
+wk11_lineup <- lineups %>%
+  filter(!is.na(projected_score), pos != "DST") %>%
+  select(week, franchise_id, franchise_name, player_id, player_name, clean_name, pos, team, player_score) %>%
+  mutate(player_id = as.character(player_id), src = "espn")
+
+wk11_pts <- player_points %>%
+  filter(week == curr_week) %>%
+  select(week, gsis_id, sportradar_id, espn_id, player_name, clean_name, pos, team, tot_points) %>%
+  mutate(src = "nflfastr")
+
+### Step 1
+# Matches by clean_name, player_id == espn_id
+match_both_1 <- wk11_lineup %>%
+  inner_join(wk11_pts, by = c("clean_name", "player_id" = "espn_id"))
+
+# Non-matches
+no_match_espn_1 <- wk11_lineup %>%
+  anti_join(wk11_pts, by = c("clean_name", "player_id" = "espn_id"))
+
+no_match_nflfastr_1 <- wk11_pts %>%
+  anti_join(wk11_lineup, by = c("clean_name", "espn_id" = "player_id"))
+
+### Step 2
+# Matches by clean_name
+match_both_2 <- no_match_espn_1 %>%
+  inner_join(no_match_nflfastr_1, by = c("clean_name"))
+
+# Non-matches
+no_match_espn_2 <- no_match_espn_1 %>%
+  anti_join(no_match_nflfastr_1, by = c("clean_name"))
+
+no_match_nflfastr_2 <- no_match_nflfastr_1 %>%
+  anti_join(no_match_espn_1, by = c("clean_name"))
+
+```
+
+### Run Forest, Run!
+
+Team with the most rushing attempts (highest average rushing attempts including flex)
+
+### Gotta Catch Em All
+
+Team with the most receptions (highest average receptions including flex)
+
+### Show Me Dem TDs
+
+Team with the most TDs scored

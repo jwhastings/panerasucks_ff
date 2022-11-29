@@ -1,0 +1,284 @@
+---
+params:
+  current_week:
+  current_season:
+
+title: "Panera Sucks"
+date: "Updated: `r Sys.time()`"
+output:
+  rmdformats::html_clean:
+    highlight: kate
+    toc_depth: 2
+    toc_float: 
+      collapsed: false
+---
+
+```{r, echo = FALSE}
+id <- 1094681 # League ID
+league_name <- "Panera Sucks"
+first_season <- 2013
+curr_season <- params$current_season # Current season/year
+curr_week <- params$current_week # Current week
+```
+
+```{css, echo = FALSE}
+h1, h2, h3 {
+  font-weight: bold;
+}
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.align = "center")
+options(knitr.kable.NA = "")
+```
+
+```{r, warning = FALSE, message = FALSE}
+library(ffscrapr)
+library(nflfastR)
+library(nflreadr)
+library(tidyverse)
+library(kableExtra)
+library(ggthemes)
+library(formattable)
+library(RColorBrewer)
+library(plotly)
+library(shiny)
+```
+
+# Weekly Reports
+
+* 2022 Season
+  * [Week 1](weekly_reports/2022/week1.html)
+  * [Week 2](weekly_reports/2022/week2.html)
+  * [Week 3](weekly_reports/2022/week3.html)
+  * [Week 4](weekly_reports/2022/week4.html)
+  * [Week 5](weekly_reports/2022/week5.html)
+  * [Week 6](weekly_reports/2022/week6.html)
+  * [Week 7](weekly_reports/2022/week7.html)
+  * [Week 8](weekly_reports/2022/week8.html)
+  * [Week 9](weekly_reports/2022/week9.html)
+  * [Week 10](weekly_reports/2022/week10.html)
+  * [Week 11](weekly_reports/2022/week11.html)
+
+# League History
+
+* [League History](league_history/league_history.html)
+
+```{r}
+# Sys.setenv(TAN_SWID = "{34906ABE-E424-42A5-906A-BEE42442A5DB}")
+# Sys.setenv(TAN_ESPN_S2 = "AEC6ROvRKhAFRU37Lk0e5eXzCkAPgT9ehW%2BXXGViGGX7jNMpAwDuhO9UDJ6UdkEGvdmHFobuIHrmeKQJxKVQyS5dMb8HlRnktPF3xM8CqfMXOaSlQ%2B2rgkmtN60UJfh5GxvLTFPLN2sg2NoSjhWzuRMik2o1P6Up8TH5SeMI3UQdlkjnWvGcfE9WjsBMSC3G%2F68SGkvgOkiRi3O1huuaXd9%2FoLwDoJaUAYO0og%2Fa7qhssrkKwsu4uCrEUzdPYvAohqCQVF5xaTYFq81MAKrNLt9G")
+
+# League objects for seasons 2013 to curr_season
+all_leagues <- first_season:curr_season %>%
+  map(function(x) {
+    espn_connect(
+      season = x,
+      league_id = id,
+      swid = Sys.getenv("TAN_SWID"),
+      espn_s2 = Sys.getenv("TAN_ESPN_S2")
+    )
+  })  
+
+curr_league <- all_leagues[[length(all_leagues)]]
+
+# Pretty round
+pr <- function(x, digits = 2) {
+  format(round(x, digits), nsmall = digits)
+}
+
+# Team colors
+cols_8 <- brewer.pal(8, "Set2")
+cols_dark_8 <- brewer.pal(8, "Dark2")
+
+# Position factor levels
+pos_lvl <- c("QB", "RB", "WR", "TE", "DST", "K")
+
+# Position colors
+pos_col <- c("#FF8181", "#A9D08E", "#94BEE4", "#FFD966", "#C7A1E3", "#F4B084")
+
+position_col <- bind_cols(pos = pos_lvl, pos_col = pos_col)
+
+# Lineup slot factor levels
+slot_lvl <- c("QB", "RB", "WR", "TE", "FLEX", "DST", "K", "TOTAL")
+slot_col <- c("#FF8181", "#A9D08E", "#94BEE4", "#FFD966",
+                     "#B6B6B6", "#C7A1E3", "#F4B084", "#FFFF00")
+
+lineup_slot_col <- bind_cols(lineup_slot = slot_lvl, slot_col = slot_col)
+
+# Team colors
+nfl_team_col <- tribble(
+  ~team, ~team_bg,
+  "ARI", "#97233F",
+  "ATL", "#A71930",
+  "BAL", "#241773",
+  "BUF", "#00338D",
+  "CAR", "#0085CA",
+  "CHI", "#F26522",
+  "CIN", "#FB4F14",
+  "CLE", "#22150C",
+  "DAL", "#0C264C",
+  "DEN", "#FB4F14",
+  "DET", "#046EB4",
+  "GBP", "#24423C",
+  "HOU", "#00143F",
+  "IND", "#003D79",
+  "JAC", "#D8A328",
+  "KCC", "#CA2430",
+  "LAC", "#2072BA",
+  "LAR", "#95774C",
+  "MIA", "#0091A0",
+  "MIN", "#4F2E84",
+  "NEP", "#0A2342",
+  "NOS", "#A08A58",
+  "NYG", "#192E6C",
+  "NYJ", "#203731",
+  "OAK", "#000000",
+  "PHI", "#014A53",
+  "PIT", "#FFC20E",
+  "SEA", "#7AC142",
+  "SFO", "#C9243F",
+  "TBB", "#D40909",
+  "TEN", "#4095D1",
+  "WAS", "#FFC20F"
+)
+
+# All seasons
+all_franchises <- all_leagues %>%
+  map_dfr(function(x) {
+    bind_cols(season = as.numeric(x$season), ff_franchises(x))
+  })
+  
+all_sched <- all_leagues %>%
+  map_dfr(function(x) {
+    bind_cols(season = as.numeric(x$season), ff_schedule(x))
+  })
+
+all_standings <- all_leagues %>%
+  map_dfr(function(x) {
+    bind_cols(season = as.numeric(x$season), ff_standings(x))
+  })
+
+
+# all_lineups <- all_leagues %>%
+#   map_dfr(function(x) {
+#     bind_cols(season = as.numeric(x$season), ff_starters(x))
+#   })
+
+#test <- ff_playerscores(curr_league)
+#test2 <- ff_scoringhistory(curr_league)
+
+# Current season league objects
+franchises <- all_franchises %>%
+  filter(season == curr_season) %>%
+  mutate(franchise_name = fct_reorder(franchise_name, franchise_id, min))
+
+franchise_color <- franchises %>%
+  select(franchise_id, franchise_name) %>%
+  bind_cols(fr_col = cols_8, fr_col_dark = cols_dark_8)
+
+lineups <- ff_starters(curr_league, week = curr_week) %>%
+  mutate(franchise_name = fct_reorder(franchise_name, franchise_id, min),
+         pos = factor(pos, levels = pos_lvl)) %>%
+  left_join(franchise_color, by = c("franchise_id", "franchise_name")) %>%
+  mutate(clean_name = dp_clean_names(player_name, lowercase = TRUE))
+
+schedule <- ff_schedule(curr_league) %>%
+  left_join(franchise_color) %>%
+  left_join(franchise_color, by = c("opponent_id" = "franchise_id"))
+
+```
+
+# Current Standings (`r params$current_season` Season, Week `r curr_week`)
+
+## Regular Standings
+```{r}
+standings <- all_standings %>%
+  filter(season == curr_season) %>%
+  arrange(desc(h2h_wins), desc(points_for)) %>%
+  mutate(rank = row_number(),
+         points_for = color_bar("lightgreen")(comma(points_for)),
+         points_against = color_bar("pink")(comma(points_against))) %>%
+  left_join(franchise_color, by = c("franchise_id", "franchise_name"))
+
+standings %>%
+  mutate(h2h_winpct = round(h2h_winpct * 100, 1)) %>%
+  select(rank, franchise_name, h2h_wins, h2h_losses, h2h_ties, h2h_winpct, points_for, points_against) %>%
+  kbl(col.names = c("Rank", "Franchise", "Wins", "Losses", "Ties", "Win %", "Points For", "Points Against"),
+      escape = F) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = standings$fr_col)
+```
+
+```{r}
+weekly_records <- schedule %>%
+  filter(week <= curr_week) %>%
+  select(week, franchise_id, franchise_name.x, fr_col.x, franchise_score, opponent_score, result) %>%
+  mutate(
+    W = if_else(result == "W", 1, 0),
+    L = if_else(result == "L", 1, 0),
+    T = if_else(result == "T", 1, 0)
+  ) %>%
+  select(-result) %>%
+  group_by(franchise_id, franchise_name.x, fr_col.x) %>%
+  mutate(
+    wins = cumsum(W),
+    losses = cumsum(L),
+    ties = cumsum(T),
+    record = paste(wins, losses, ties, sep = "-"),
+    points_for = cumsum(franchise_score),
+    points_against = cumsum(opponent_score),
+  ) %>%
+  select(-c(W, L, T, franchise_score, opponent_score)) %>%
+  arrange(week, desc(wins), desc(points_for)) %>%
+  group_by(week) %>%
+  mutate(weekly_rank = row_number())
+
+fig <- plot_ly(weekly_records,
+  x = ~week,
+  y = ~weekly_rank,
+  split = ~franchise_name.x,
+  type = "scatter",
+  mode = "line",
+  color = ~franchise_name.x,
+  colors = cols_dark_8
+  ) %>%
+  layout(
+    title = "Weekly Standings",
+    xaxis = list(
+      title = "",
+      ticktext = as.list(paste("Week", seq(1, curr_week))),
+      tickvals = as.list(seq(1, curr_week)),
+      tickmode = "array"
+      ),
+    yaxis = list(
+      title = "",
+      autorange = "reversed",
+      ticktext = as.list(scales::ordinal(seq(1, 8))),
+      tickvals = as.list(seq(1, 8)),
+      tickmode = "array"
+    ),
+    showlegend = FALSE,
+    hovermode = "x"
+    )
+
+div(fig, align = "center")
+```
+
+
+## All-Play Standings
+
+`All-Play` is your record if you played all other teams every single week.
+
+```{r}
+allplay_standings <- standings %>%
+  arrange(desc(allplay_wins), desc(points_for)) %>%
+  mutate(rank = row_number())
+
+allplay_standings %>%
+  mutate(allplay_winpct = round(allplay_winpct * 100, 1)) %>%
+  select(rank, franchise_name, allplay_wins, allplay_losses, allplay_winpct) %>%
+  kbl(col.names = c("Rank", "Franchise", "All-Play Wins", "All-Play Losses", "All-Play Win %"),
+      escape = F) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = allplay_standings$fr_col)
+```
