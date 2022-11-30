@@ -59,6 +59,7 @@ library(shiny)
   * [Week 9](weekly_reports/2022/week9.html)
   * [Week 10](weekly_reports/2022/week10.html)
   * [Week 11](weekly_reports/2022/week11.html)
+  * [Week 12](weekly_reports/2022/week12.html)
 
 # League History
 
