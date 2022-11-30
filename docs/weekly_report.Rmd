@@ -384,7 +384,7 @@ standings <- weekly_records %>%
   arrange(desc(h2h_wins), desc(points_for)) %>%
   mutate(points_for = color_bar("lightgreen")(comma(points_for)),
          points_against = color_bar("pink")(comma(points_against)),
-         h2h_winpct = h2h_wins / (h2h_wins + h2h_losses + h2h_ties))
+         h2h_winpct = (h2h_wins + h2h_ties / 2) / (h2h_wins + h2h_losses + h2h_ties))
 
 standings %>%
   mutate(h2h_winpct = round(h2h_winpct * 100, 1)) %>%
@@ -474,20 +474,28 @@ team_scores <- all_team_scores %>%
 
 # number times highest/low scorer
 season_high_scores <- all_team_scores %>%
-  filter(season == curr_season) %>%
-  left_join(select(franchises, franchise_id, franchise_name)) %>%
+  filter(season == curr_season, week <= curr_week) %>%
   group_by(week) %>%
   slice_max(franchise_score) %>%
-  group_by(franchise_id, franchise_name) %>%
-  summarize(num_high = n())
+  group_by(franchise_id) %>%
+  summarize(num_high = n()) %>%
+  full_join(franchise_color) %>%
+  mutate(num_high = if_else(is.na(num_high), as.integer(0), num_high)) %>%
+  arrange(desc(num_high)) %>%
+  ungroup() %>%
+  mutate(rank = rank(-num_high, ties.method = "min"))
 
 season_low_scores <- all_team_scores %>%
-  filter(season == curr_season) %>%
-  left_join(select(franchises, franchise_id, franchise_name)) %>%
+  filter(season == curr_season, week <= curr_week) %>%
   group_by(week) %>%
   slice_min(franchise_score) %>%
-  group_by(franchise_id, franchise_name) %>%
-  summarize(num_low = n())
+  group_by(franchise_id) %>%
+  summarize(num_low = n()) %>%
+  full_join(franchise_color) %>%
+  mutate(num_low = if_else(is.na(num_low), as.integer(0), num_low)) %>%
+  arrange(num_low) %>%
+  ungroup() %>%
+  mutate(rank = rank(num_low, ties.method = "min"))
 
 team_high <- team_scores %>%
   slice_head(n = 1) %>%
@@ -496,7 +504,6 @@ team_high <- team_scores %>%
 team_low <- team_scores %>%
   slice_tail(n = 1) %>%
   inner_join(season_low_scores)
-
 
 team_scores_table <- team_scores %>%
   full_join(franchise_color, by = c("franchise_id", "franchise_name")) %>%
@@ -519,8 +526,32 @@ team_scores_table %>%
 ### - Highest Scoring Franchise
 The highest scoring franchise was **`r team_high$franchise_name`** with **`r pr(team_high$franchise_score)`** points. This score was in **`r scales::ordinal(floor(team_high$score_pctile))`** percentile for all `r nrow(all_sched_played)` lineups dating back to **`r first_season`**. This is their **`r scales::ordinal(team_high$num_high)`** time with the highest weekly score this season.
 
+```{r}
+season_high_scores %>%
+  select(rank, franchise_name, num_high) %>%
+  kbl(
+    col.names = c("Rank", "Franchise", "Weeks with Highest Score"),
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = season_high_scores$fr_col) %>%
+  column_spec(3, background = spec_color(season_high_scores$num_high, end = 0.9), color = "white")
+```
+
 ### - Lowest Scoring Franchise
 The lowest scoring franchise was **`r team_low$franchise_name`** with **`r pr(team_low$franchise_score)`** points. This score was in **`r scales::ordinal(floor(team_low$score_pctile))`** percentile for all `r nrow(all_sched_played)` lineups dating back to **`r first_season`**. This is their **`r scales::ordinal(team_low$num_low)`** time with the lowest weekly score this season.
+
+```{r}
+season_low_scores %>%
+  select(rank, franchise_name, num_low) %>%
+  kbl(
+    col.names = c("Rank", "Franchise", "Weeks with Lowest Score"),
+    escape = F
+    ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = season_low_scores$fr_col) %>%
+  column_spec(3, background = spec_color(season_low_scores$num_low, end = 0.9, direction = -1), color = "white")
+```
 
 ## Starts of the Week
 ```{r}

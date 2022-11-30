@@ -244,7 +244,7 @@ cumulative_standings <- all_records %>%
   ) %>%
   arrange(desc(h2h_wins), desc(points_for)) %>%
   mutate(
-    h2h_winpct = h2h_wins / (h2h_wins + h2h_losses + h2h_ties),
+    h2h_winpct = (h2h_wins + h2h_ties / 2) / (h2h_wins + h2h_losses + h2h_ties),
     points_for = color_bar("lightgreen")(comma(points_for)),
     points_against = color_bar("pink")(comma(points_against)),
     rank = row_number()
@@ -276,7 +276,7 @@ avg_standings <- all_records %>%
   group_by(user_name) %>%
   summarize(across(where(is.numeric), mean)) %>%
   mutate(
-    h2h_winpct = h2h_wins / (h2h_wins + h2h_losses + h2h_ties)
+    h2h_winpct = (h2h_wins + h2h_ties / 2) / (h2h_wins + h2h_losses + h2h_ties)
   ) %>%
   arrange(desc(h2h_wins), desc(points_for)) %>%
   ungroup() %>%
