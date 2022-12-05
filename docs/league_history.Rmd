@@ -25,7 +25,36 @@ curr_week <- params$current_week # Current week
 oldest_lineup_season <- 2018
 ```
 
-<!-- https://mbounthavong.com/blog/2022/7/30/hosting-a-r-markdown-html-file-on-a-github-page -->
+# Notable Changes
+
+* 2020 Season
+  * 1 **bench** slot removed (now 7)
+  * **Justin** leaves
+  * **Lenny** joins
+* 2019 Season
+  * 1 additional **RB/WR/TE** slot added (now 2)
+* 2018 Season
+  * **Warren** leaves
+  * **Zack** rejoins
+* 2017 Season
+  * 1 additional **IR** slot added (now 2)
+  * **Evan** leaves
+  * **Chris** Allen joins
+* 2016 Season
+  * 1 **IR** slot added (now 1)
+* 2014 Season
+  * **Chris S.** leaves
+  * **Evan** rejoins
+* 2013 Season
+  * **8** team, **2** QB, **3** RB, **3** WR, **1** TE, **1** RB/WR/TE, **1** D/ST, **1** K, **8** Bench
+    * Drop to 8 teams, add 1 QB slot, add 1 RB slot, add 2 bench slots
+  * **Zack** leaves, **Evan** leaves, **Matt** leaves
+  * **Chris S.** joins
+* 2012 Season
+  * **10** team, **1** QB, **2** RB, **3** WR, **1** TE, **1** RB/WR/TE, **1** D/ST, **1** K, **6** Bench
+  * Original members
+    * Ritter > Jamie > Evan > Warren > Dan > Joey > Zack > Justin > Matt > Andol
+  
 
 ```{css, echo = FALSE}
 h1, h2, h3 {
@@ -371,7 +400,8 @@ all_team_scores %>%
     escape = F
     ) %>%
   kable_styling(bootstrap_options = c("striped", "hover"), fixed_thead = TRUE) %>%
-  column_spec(4, background = all_team_scores$pctile_col, color = "white")
+  column_spec(4, background = all_team_scores$pctile_col, color = "white") %>%
+  scroll_box(width = "100%", height = "500px")
 ```
 
 ### - Highest Scoring Franchise
@@ -537,8 +567,6 @@ max_score <- max_all %>%
   group_by(season, week, franchise_id, user_name) %>%
   summarize(max_score = sum(player_score))
 
-
-
 manager_efficiency <- lineups %>%
   distinct(season, week, franchise_id, user_name, franchise_score) %>%
   filter(season >= oldest_lineup_season) %>%
@@ -560,8 +588,11 @@ manager_efficiency %>%
     escape = F
     ) %>%
   kable_styling(bootstrap_options = c("striped", "hover"), fixed_thead = TRUE) %>%
-  column_spec(5, color = "white", background = spec_color(manager_efficiency$score_delta, end = 0.9))
+  column_spec(5, color = "white", background = spec_color(manager_efficiency$score_delta, end = 0.9)) %>%
+  scroll_box(width = "100%", height = "500px")
+```
 
+```{r}
 if (manager_best$score_delta == 0) {
   manager_best_text <- paste0("**", manager_best$user_name, "** set a perfect line-up that scored **", manager_best$franchise_score, "** points in week **", manager_best$week, "** of the **", manager_best$season, "** season.")
 } else {
