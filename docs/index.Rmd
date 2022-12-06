@@ -48,23 +48,23 @@ library(shiny)
 # Weekly Reports
 
 * 2022 Season
-  * [Week 1](weekly_reports/2022/week1.html)
-  * [Week 2](weekly_reports/2022/week2.html)
-  * [Week 3](weekly_reports/2022/week3.html)
-  * [Week 4](weekly_reports/2022/week4.html)
-  * [Week 5](weekly_reports/2022/week5.html)
-  * [Week 6](weekly_reports/2022/week6.html)
-  * [Week 7](weekly_reports/2022/week7.html)
-  * [Week 8](weekly_reports/2022/week8.html)
-  * [Week 9](weekly_reports/2022/week9.html)
-  * [Week 10](weekly_reports/2022/week10.html)
-  * [Week 11](weekly_reports/2022/week11.html)
-  * [Week 12](weekly_reports/2022/week12.html)
+  * [Week 1](weekly_reports/2022/week1/)
+  * [Week 2](weekly_reports/2022/week2/)
+  * [Week 3](weekly_reports/2022/week3/)
+  * [Week 4](weekly_reports/2022/week4/)
+  * [Week 5](weekly_reports/2022/week5/)
+  * [Week 6](weekly_reports/2022/week6/)
+  * [Week 7](weekly_reports/2022/week7/)
+  * [Week 8](weekly_reports/2022/week8/)
+  * [Week 9](weekly_reports/2022/week9/)
+  * [Week 10](weekly_reports/2022/week10/)
+  * [Week 11](weekly_reports/2022/week11/)
+  * [Week 12](weekly_reports/2022/week12/)
   * [Week 13](weekly_reports/2022/week13/)
 
 # League History
 
-* [League History](league_history/league_history.html)
+* [League History](league_history/)
 
 ```{r}
 # Sys.setenv(TAN_SWID = "{34906ABE-E424-42A5-906A-BEE42442A5DB}")

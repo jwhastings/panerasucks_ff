@@ -14,7 +14,7 @@ output:
       collapsed: false
 ---
 
-[Back](../index.html)
+[Back](../)
 
 ```{r, echo = FALSE}
 id <- 1094681 # League ID
