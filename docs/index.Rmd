@@ -16,7 +16,7 @@ output:
 ```{r, echo = FALSE}
 id <- 1094681 # League ID
 league_name <- "Panera Sucks"
-first_season <- 2013
+first_season <- 2012
 curr_season <- params$current_season # Current season/year
 curr_week <- params$current_week # Current week
 ```
@@ -67,10 +67,7 @@ library(shiny)
 * [League History](league_history/)
 
 ```{r}
-# Sys.setenv(TAN_SWID = "{34906ABE-E424-42A5-906A-BEE42442A5DB}")
-# Sys.setenv(TAN_ESPN_S2 = "AEC6ROvRKhAFRU37Lk0e5eXzCkAPgT9ehW%2BXXGViGGX7jNMpAwDuhO9UDJ6UdkEGvdmHFobuIHrmeKQJxKVQyS5dMb8HlRnktPF3xM8CqfMXOaSlQ%2B2rgkmtN60UJfh5GxvLTFPLN2sg2NoSjhWzuRMik2o1P6Up8TH5SeMI3UQdlkjnWvGcfE9WjsBMSC3G%2F68SGkvgOkiRi3O1huuaXd9%2FoLwDoJaUAYO0og%2Fa7qhssrkKwsu4uCrEUzdPYvAohqCQVF5xaTYFq81MAKrNLt9G")
-
-# League objects for seasons 2013 to curr_season
+# League objects for seasons 2012 to curr_season
 all_leagues <- first_season:curr_season %>%
   map(function(x) {
     espn_connect(

@@ -76,11 +76,9 @@ cols_dark_8 <- brewer.pal(8, "Dark2")
 
 # Position factor levels
 pos_lvl <- c("QB", "RB", "WR", "TE", "DST", "K")
-
-# Position colors
 pos_col <- c("#FF8181", "#A9D08E", "#94BEE4", "#FFD966", "#C7A1E3", "#F4B084")
 
-position_col <- bind_cols(pos = pos_lvl, pos_col = pos_col)
+position_col <- bind_cols(pos = factor(pos_lvl, levels = pos_lvl), pos_col = pos_col)
 
 # Lineup slot factor levels
 slot_lvl <- c("QB", "RB", "WR", "TE", "FLEX", "DST", "K", "TOTAL")
@@ -257,6 +255,40 @@ matchup_1 %>%
   column_spec(3, background = matchup_1$slot_col)
 ```
 
+```{r, fig.height = 3}
+matchup_pie <- head2head %>%
+  inner_join(slice(matchup_simple, 1)) %>%
+  left_join(position_col, by = c("pos.x" = "pos")) %>%
+  left_join(position_col, by = c("pos.y" = "pos"))
+
+fig_pie <- plot_ly() %>%
+  add_pie(
+    data = matchup_pie,
+    labels = ~ pos.x,
+    values = ~ player_score.x,
+    name = ~ franchise_name.x,
+    marker = list(colors = ~pos_col.x),
+    domain = list(row = 0, column = 0),
+    hole = 0.5
+  ) %>%
+  add_pie(
+    data = matchup_pie,
+    labels = ~ pos.y,
+    values = ~ player_score.y,
+    name = ~ franchise_name.y,
+    marker = list(colors = ~pos_col.y),
+    domain = list(row = 0, column = 1),
+    hole = 0.5
+  ) %>%
+  layout(
+    title = paste0(team_x, " vs. ", team_y),
+    legend = list(orientation = "h", xanchor = "center", x = 0.5),
+    grid = list(rows = 1, columns = 2)
+  )
+
+div(fig_pie, align = "center")
+```
+
 ## Matchup 2 Details
 ```{r}
 matchup_2_tot <- matchups %>% slice(2) %>%
@@ -286,6 +318,40 @@ matchup_2 %>%
   pack_rows(paste0(team_x, " vs. ", team_y), 1, 14, label_row_css = "text-align: center;") %>%
   column_spec(2:4, extra_css = "vertical-align:middle;") %>%
   column_spec(3, background = matchup_2$slot_col)
+```
+
+```{r, fig.height = 3}
+matchup_pie <- head2head %>%
+  inner_join(slice(matchup_simple, 2)) %>%
+  left_join(position_col, by = c("pos.x" = "pos")) %>%
+  left_join(position_col, by = c("pos.y" = "pos"))
+
+fig_pie <- plot_ly() %>%
+  add_pie(
+    data = matchup_pie,
+    labels = ~ pos.x,
+    values = ~ player_score.x,
+    name = ~ franchise_name.x,
+    marker = list(colors = ~pos_col.x),
+    domain = list(row = 0, column = 0),
+    hole = 0.5
+  ) %>%
+  add_pie(
+    data = matchup_pie,
+    labels = ~ pos.y,
+    values = ~ player_score.y,
+    name = ~ franchise_name.y,
+    marker = list(colors = ~pos_col.y),
+    domain = list(row = 0, column = 1),
+    hole = 0.5
+  ) %>%
+  layout(
+    title = paste0(team_x, " vs. ", team_y),
+    legend = list(orientation = "h", xanchor = "center", x = 0.5),
+    grid = list(rows = 1, columns = 2)
+  )
+
+div(fig_pie, align = "center")
 ```
 
 ## Matchup 3 Details
@@ -319,6 +385,40 @@ matchup_3 %>%
   column_spec(3, background = matchup_3$slot_col)
 ```
 
+```{r, fig.height = 3}
+matchup_pie <- head2head %>%
+  inner_join(slice(matchup_simple, 3)) %>%
+  left_join(position_col, by = c("pos.x" = "pos")) %>%
+  left_join(position_col, by = c("pos.y" = "pos"))
+
+fig_pie <- plot_ly() %>%
+  add_pie(
+    data = matchup_pie,
+    labels = ~ pos.x,
+    values = ~ player_score.x,
+    name = ~ franchise_name.x,
+    marker = list(colors = ~pos_col.x),
+    domain = list(row = 0, column = 0),
+    hole = 0.5
+  ) %>%
+  add_pie(
+    data = matchup_pie,
+    labels = ~ pos.y,
+    values = ~ player_score.y,
+    name = ~ franchise_name.y,
+    marker = list(colors = ~pos_col.y),
+    domain = list(row = 0, column = 1),
+    hole = 0.5
+  ) %>%
+  layout(
+    title = paste0(team_x, " vs. ", team_y),
+    legend = list(orientation = "h", xanchor = "center", x = 0.5),
+    grid = list(rows = 1, columns = 2)
+  )
+
+div(fig_pie, align = "center")
+```
+
 ## Matchup 4 Details
 ```{r}
 matchup_4_tot <- matchups %>% slice(4) %>%
@@ -348,6 +448,40 @@ matchup_4 %>%
   pack_rows(paste0(team_x, " vs. ", team_y), 1, 14, label_row_css = "text-align: center;") %>%
   column_spec(2:4, extra_css = "vertical-align:middle;") %>%
   column_spec(3, background = matchup_4$slot_col)
+```
+
+```{r, fig.height = 3}
+matchup_pie <- head2head %>%
+  inner_join(slice(matchup_simple, 4)) %>%
+  left_join(position_col, by = c("pos.x" = "pos")) %>%
+  left_join(position_col, by = c("pos.y" = "pos"))
+
+fig_pie <- plot_ly() %>%
+  add_pie(
+    data = matchup_pie,
+    labels = ~ pos.x,
+    values = ~ player_score.x,
+    name = ~ franchise_name.x,
+    marker = list(colors = ~pos_col.x),
+    domain = list(row = 0, column = 0),
+    hole = 0.5
+  ) %>%
+  add_pie(
+    data = matchup_pie,
+    labels = ~ pos.y,
+    values = ~ player_score.y,
+    name = ~ franchise_name.y,
+    marker = list(colors = ~pos_col.y),
+    domain = list(row = 0, column = 1),
+    hole = 0.5
+  ) %>%
+  layout(
+    title = paste0(team_x, " vs. ", team_y),
+    legend = list(orientation = "h", xanchor = "center", x = 0.5),
+    grid = list(rows = 1, columns = 2)
+  )
+
+div(fig_pie, align = "center")
 ```
 
 # Week `r curr_week` Standings
@@ -396,7 +530,7 @@ standings %>%
 ```
 
 ```{r}
-fig <- plot_ly(weekly_records,
+fig_standings <- plot_ly(weekly_records,
   x = ~week,
   y = ~weekly_rank,
   split = ~franchise_name,
@@ -424,7 +558,7 @@ fig <- plot_ly(weekly_records,
     hovermode = "x"
     )
 
-div(fig, align = "center")
+div(fig_standings, align = "center")
 ```
 
 ## All-Play Standings
@@ -819,7 +953,7 @@ lineups_te <- lineups_pos %>%
 lineups_qb %>%
   select(rank, franchise_name, mean_pt, all_players, n) %>%
   kbl(digits = 2,
-    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "Number Played"),
+    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "# Players"),
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -831,7 +965,7 @@ lineups_qb %>%
 lineups_rb %>%
   select(rank, franchise_name, mean_pt, all_players, n) %>%
   kbl(digits = 2,
-    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "Number Played"),
+    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "# Players"),
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -843,7 +977,7 @@ lineups_rb %>%
 lineups_wr %>%
   select(rank, franchise_name, mean_pt, all_players, n) %>%
   kbl(digits = 2,
-    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "Number Played"),
+    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "# Players"),
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -855,7 +989,7 @@ lineups_wr %>%
 lineups_te %>%
   select(rank, franchise_name, mean_pt, all_players, n) %>%
   kbl(digits = 2,
-    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "Number Played"),
+    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "# Players"),
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
