@@ -431,10 +431,28 @@ div(fig, align = "center")
 
 `All-Play` is your record if you played all other teams every single week.
 
-```{r, eval = FALSE}
-allplay_standings <- standings %>%
-  arrange(desc(allplay_wins), desc(points_for)) %>%
-  mutate(rank = row_number())
+```{r}
+allplay_standings <- schedule %>%
+  filter(week <= curr_week) %>%
+  group_by(week) %>%
+  expand(franchise_id, opponent_id) %>%
+  filter(franchise_id != opponent_id) %>%
+  left_join(select(schedule, week, franchise_id, "franchise_name" = "franchise_name.x", "fr_col" = "fr_col.x", franchise_score)) %>%
+  left_join(select(schedule, week, opponent_id, opponent_score)) %>%
+  mutate(
+    W = if_else(franchise_score > opponent_score, 1, 0),
+    L = if_else(franchise_score < opponent_score, 1, 0),
+    T = if_else(franchise_score == opponent_score, 1, 0)
+  ) %>%
+  group_by(franchise_id, franchise_name, fr_col) %>%
+  summarize(
+    allplay_wins = sum(W),
+    allplay_losses = sum(L),
+    allplay_ties = sum(T),
+    allplay_winpct = (allplay_wins + 0.5 * allplay_ties) / (allplay_wins + allplay_ties + allplay_losses)  ) %>%
+  arrange(desc(allplay_winpct)) %>%
+  ungroup() %>%
+  mutate(rank = rank(-allplay_winpct, ties.method = "min"))
 
 allplay_standings %>%
   mutate(allplay_winpct = round(allplay_winpct * 100, 1)) %>%
@@ -777,7 +795,7 @@ lineups_pos <- lineups %>%
   group_by(week, franchise_id, franchise_name, fr_col, pos) %>%
   arrange(desc(player_score)) %>%
   summarize(n = n(), mean_pt = mean(player_score),
-            all_players = paste(player_name, paste0("(", player_score, ")"), collapse = ", "),.groups = "keep") %>%
+            all_players = paste(player_name, paste0("(", player_score, ")"), collapse = ", "), .groups = "keep") %>%
   group_by(pos) %>%
   arrange(pos, desc(mean_pt)) %>%
   mutate(rank = row_number()) %>%
@@ -799,9 +817,9 @@ lineups_te <- lineups_pos %>%
 
 ```{r}
 lineups_qb %>%
-  select(rank, franchise_name, n, mean_pt, all_players) %>%
+  select(rank, franchise_name, mean_pt, all_players, n) %>%
   kbl(digits = 2,
-    col.names = c("Rank", "Franchise", "Number Played", "Avg. Points", "Player Names"),
+    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "Number Played"),
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -811,9 +829,9 @@ lineups_qb %>%
 
 ```{r}
 lineups_rb %>%
-  select(rank, franchise_name, n, mean_pt, all_players) %>%
+  select(rank, franchise_name, mean_pt, all_players, n) %>%
   kbl(digits = 2,
-    col.names = c("Rank", "Franchise", "Number Played", "Avg. Points", "Player Names"),
+    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "Number Played"),
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -823,9 +841,9 @@ lineups_rb %>%
 
 ```{r}
 lineups_wr %>%
-  select(rank, franchise_name, n, mean_pt, all_players) %>%
+  select(rank, franchise_name, mean_pt, all_players, n) %>%
   kbl(digits = 2,
-    col.names = c("Rank", "Franchise", "Number Played", "Avg. Points", "Player Names"),
+    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "Number Played"),
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -835,9 +853,9 @@ lineups_wr %>%
 
 ```{r}
 lineups_te %>%
-  select(rank, franchise_name, n, mean_pt, all_players) %>%
+  select(rank, franchise_name, mean_pt, all_players, n) %>%
   kbl(digits = 2,
-    col.names = c("Rank", "Franchise", "Number Played", "Avg. Points", "Player Names"),
+    col.names = c("Rank", "Franchise", "Avg. Points", "Player Names", "Number Played"),
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
@@ -900,7 +918,14 @@ league_rules <- scoring_rules %>%
     platform = "espn"
   )
 
-ros <- nflfastr_rosters(curr_season) %>%
+#ros <- nflfastr_rosters(curr_season) %>%
+ros <- load_rosters_weekly(curr_season) %>%
+  mutate(full_name = case_when(
+    gsis_id == "00-0032688" ~ "Robbie Anderson",
+    TRUE ~ full_name
+    )
+  ) %>%
+  filter(week == curr_week) %>%
   mutate(position = if_else(position == "SPEC", depth_chart_position, position)) %>%
   select(any_of(c(
     "season", "gsis_id", "sportradar_id",
@@ -1051,28 +1076,26 @@ player_points <- ros %>%
 
 ```{r}
 # Merging with ESPN
-
-wk11_lineup <- lineups %>%
+weekly_lineup <- lineups %>%
   filter(!is.na(projected_score), pos != "DST") %>%
-  select(week, franchise_id, franchise_name, player_id, player_name, clean_name, pos, team, player_score) %>%
+  select(week, franchise_id, franchise_name, fr_col, player_id, player_name, clean_name, pos, team, lineup_slot, player_score) %>%
   mutate(player_id = as.character(player_id), src = "espn")
 
-wk11_pts <- player_points %>%
+weekly_pts <- player_points %>%
   filter(week == curr_week) %>%
-  select(week, gsis_id, sportradar_id, espn_id, player_name, clean_name, pos, team, tot_points) %>%
-  mutate(src = "nflfastr")
+  select(espn_id, clean_name, everything(), -c(season, week, gsis_id, sportradar_id, player_name, pos, team))
 
 ### Step 1
 # Matches by clean_name, player_id == espn_id
-match_both_1 <- wk11_lineup %>%
-  inner_join(wk11_pts, by = c("clean_name", "player_id" = "espn_id"))
+match_both_1 <- weekly_lineup %>%
+  inner_join(weekly_pts, by = c("clean_name", "player_id" = "espn_id"))
 
 # Non-matches
-no_match_espn_1 <- wk11_lineup %>%
-  anti_join(wk11_pts, by = c("clean_name", "player_id" = "espn_id"))
+no_match_espn_1 <- weekly_lineup %>%
+  anti_join(weekly_pts, by = c("clean_name", "player_id" = "espn_id"))
 
-no_match_nflfastr_1 <- wk11_pts %>%
-  anti_join(wk11_lineup, by = c("clean_name", "espn_id" = "player_id"))
+no_match_nflfastr_1 <- weekly_pts %>%
+  anti_join(weekly_lineup, by = c("clean_name", "espn_id" = "player_id"))
 
 ### Step 2
 # Matches by clean_name
@@ -1086,16 +1109,128 @@ no_match_espn_2 <- no_match_espn_1 %>%
 no_match_nflfastr_2 <- no_match_nflfastr_1 %>%
   anti_join(no_match_espn_1, by = c("clean_name"))
 
+potential_issue <- no_match_espn_2 %>% filter(player_score != 0) %>% nrow()
+
+if (potential_issue > 0) {
+  print("Possible merge issues:")
+  no_match_espn_2 %>% filter(player_score != 0)
+}
+
+espn_lineup_stats <- bind_rows(match_both_1, match_both_2, no_match_espn_2)
 ```
+
+### Throwin' a Fit
+
+Teams with the most passing completions.
+
+```{r}
+most_completions <- espn_lineup_stats %>%
+  filter(!(lineup_slot %in% c("BE", "IR"))) %>%
+  filter(completions > 0) %>%
+  group_by(franchise_id, franchise_name, fr_col) %>%
+  arrange(desc(completions)) %>%
+  summarize(n = n(),
+            sum_compl = sum(completions),
+            all_players = paste(player_name, paste0("(", completions, ")"), collapse = ", "), .groups = "keep") %>%
+  ungroup() %>%
+  arrange(desc(sum_compl)) %>%
+  mutate(rank = rank(-sum_compl, ties.method = "min"))
+
+most_completions %>%
+  select(rank, franchise_name, sum_compl, all_players, n) %>%
+  kbl(digits = 2,
+    col.names = c("Rank", "Franchise", "Total Completions", "Player Names", "# Players"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = most_completions$fr_col)
+```
+
 
 ### Run Forest, Run!
 
-Team with the most rushing attempts (highest average rushing attempts including flex)
+Teams with the most rushing attempts.
+
+```{r}
+most_rushes <- espn_lineup_stats %>%
+  filter(!(lineup_slot %in% c("BE", "IR"))) %>%
+  filter(carries > 0) %>%
+  group_by(franchise_id, franchise_name, fr_col) %>%
+  arrange(desc(carries)) %>%
+  summarize(n = n(),
+            sum_rush = sum(carries),
+            all_players = paste(player_name, paste0("(", carries, ")"), collapse = ", "), .groups = "keep") %>%
+  ungroup() %>%
+  arrange(desc(sum_rush)) %>%
+  mutate(rank = rank(-sum_rush, ties.method = "min"))
+
+most_rushes %>%
+  select(rank, franchise_name, sum_rush, all_players, n) %>%
+  kbl(digits = 2,
+    col.names = c("Rank", "Franchise", "Total Carries", "Player Names", "# Players"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = most_rushes$fr_col)
+```
 
 ### Gotta Catch Em All
 
-Team with the most receptions (highest average receptions including flex)
+Teams with the most receptions.
+
+```{r}
+most_catches <- espn_lineup_stats %>%
+  filter(!(lineup_slot %in% c("BE", "IR"))) %>%
+  filter(receptions > 0) %>%
+  group_by(franchise_id, franchise_name, fr_col) %>%
+  arrange(desc(receptions)) %>%
+  summarize(n = n(),
+            sum_catch = sum(receptions),
+            all_players = paste(player_name, paste0("(", receptions, ")"), collapse = ", "), .groups = "keep") %>%
+  ungroup() %>%
+  arrange(desc(sum_catch)) %>%
+  mutate(rank = rank(-sum_catch, ties.method = "min"))
+
+most_catches %>%
+  select(rank, franchise_name, sum_catch, all_players, n) %>%
+  kbl(digits = 2,
+    col.names = c("Rank", "Franchise", "Total Receptions", "Player Names", "# Players"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = most_catches$fr_col)
+```
+
 
 ### Show Me Dem TDs
 
-Team with the most TDs scored
+Team with the most touchdowns scored.
+
+```{r}
+most_tds <- espn_lineup_stats %>%
+  filter(!(lineup_slot %in% c("BE", "IR"))) %>%
+  mutate(total_td = passing_tds + receiving_tds + rushing_tds + kickoff_return_touchdowns + punt_return_touchdowns) %>%
+  filter(total_td > 0) %>%
+  group_by(franchise_id, franchise_name, fr_col) %>%
+  arrange(desc(total_td)) %>%
+  summarize(
+    n = n(),
+    sum_tot_td = sum(total_td),
+    sum_pass_td = sum(passing_tds),
+    sum_receiving_td = sum(receiving_tds),
+    sum_rush_td = sum(rushing_tds),
+    sum_st_td = sum(kickoff_return_touchdowns,  punt_return_touchdowns),
+    all_players = paste(player_name, paste0("(", total_td, ")"), collapse = ", "), .groups = "keep") %>%
+  ungroup() %>%
+  arrange(desc(sum_tot_td)) %>%
+  mutate(rank = rank(-sum_tot_td, ties.method = "min"))
+
+most_tds %>%
+  select(rank, franchise_name, sum_tot_td, sum_pass_td, sum_receiving_td, sum_rush_td, sum_st_td, all_players, n) %>%
+  kbl(digits = 2,
+    col.names = c("Rank", "Franchise", "Total TDs", "Pass TDs", "Receiving TDs", "Rushing TDs", "Special Team TDs", "Player Names", "# Players"),
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  column_spec(2, background = most_tds$fr_col)
+```
